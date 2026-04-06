@@ -110,7 +110,7 @@ contract LicenseVerifier {
 
         bool isActive = (statusEnum == 1 && licenseExpiresAt > block.timestamp);
 
-        string[5] memory tierNames = ["Micro", "Small", "Medium", "Enterprise", "AI_Training"];
+        string[5] memory tierNames = ["Tier1_Individual", "Tier2_Team", "Tier3_Organization", "Tier4_LargeOrg", "AI_Training"];
         tier = tierNames[tierEnum];
         expiresAt = licenseExpiresAt;
 

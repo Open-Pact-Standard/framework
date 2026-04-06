@@ -23,7 +23,7 @@ import "../interfaces/IRoyaltyRegistry.sol";
  *      - Any EIP-6372-compliant governor
  *
  *      Key difference from RoyaltyRegistry:
- *      - RoyaltyRegistry: Single owner (maintainer) controls everything
+ *      - RoyaltyRegistry: Single License Steward controls everything
  *      - GuildRoyalty: Governance (DAO/Guild) controls parameters via proposals
  *
  *      Architecture:
@@ -352,9 +352,8 @@ contract GuildRoyalty is Ownable, Pausable, ReentrancyGuard {
 
     /**
      * @dev Withdraw treasury's share of pending royalties
-     * @param projectId The project ID
      */
-    function withdrawTreasuryShare(uint256 projectId) external nonReentrant {
+    function withdrawTreasuryShare() external nonReentrant {
         if (guildTreasury == address(0)) revert TreasuryNotSet();
         if (msg.sender != guildTreasury && msg.sender != governor) {
             revert NotGovernor();
@@ -431,10 +430,10 @@ contract GuildRoyalty is Ownable, Pausable, ReentrancyGuard {
 
     /**
      * @dev Update the Governor address
-     * @param newGovernor New Governor contract address
+     * @param _newGovernor New Governor contract address (placeholder - governor is immutable)
      */
-    function updateGovernor(address newGovernor) external onlyGovernor {
-        if (newGovernor == address(0)) revert ZeroAddress();
+    function updateGovernor(address _newGovernor) external onlyGovernor {
+        if (_newGovernor == address(0)) revert ZeroAddress();
         address oldGovernor = governor;
         // Note: governor is immutable, this would require a different pattern
         // Leaving as placeholder for future upgradeability

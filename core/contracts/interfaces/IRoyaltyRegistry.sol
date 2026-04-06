@@ -10,9 +10,9 @@ import "./IPaymentLedger.sol";
  *      Use RoyaltyRegistry.LicenseTier when you need the enum type locally.
  *
  *      Enum value mappings (defined in RoyaltyRegistry.sol):
- *      LicenseTier:    Micro=0, Small=1, Medium=2, Enterprise=3, AI_Training=4
+ *      LicenseTier:    Tier1_Individual=0, Tier2_Team=1, Tier3_Organization=2, Tier4_LargeOrg=3, AI_Training=4
  *      LicenseStatus:  None=0, Active=1, Expired=2, Revoked=3
- *      PricingMode:    FixedTiers=0, RevenueShare=1, Custom=2
+ *      PricingMode:    Structured=0, RevenueShare=1, Custom=2
  */
 interface IRoyaltyRegistry {
     // View-only structs with simple types
@@ -20,7 +20,7 @@ interface IRoyaltyRegistry {
         string name;
         bytes32 contentHash;
         string metadataURI;
-        address maintainer;
+        address licenseSteward;
         uint8 pricingMode;
         bool exists;
     }
@@ -44,7 +44,55 @@ interface IRoyaltyRegistry {
     function paymentLedger() external view returns (IPaymentLedger);
     function paymentVerifier() external view returns (address);
 
+    // SaaS Revenue reporting structs
+    struct ViewRevenueReport {
+        uint256 reportedGrossRevenue;
+        uint256 reportedInfrastructure;
+        uint256 reportedNetRevenue;
+        uint256 sharePercentage;
+        uint256 amountOwed;
+        uint256 amountPaid;
+        bytes32 evidenceHash;
+        uint256 reportedAt;
+        bool isPaidInFull;
+    }
+
     // Write/state-changing functions (for governance and management)
+    function reportSaaSRevenue(
+        uint256 projectId,
+        uint256 grossRevenue,
+        uint256 infrastructureCost,
+        uint256 stewardShareBps,
+        bytes32 evidenceHash
+    ) external;
+    function payRevenueShare(uint256 projectId, uint256 reportIndex) external payable;
+    function getRevenueReport(uint256 projectId, address licensee, uint256 index) external view returns (ViewRevenueReport memory);
+
+    // Workforce tracking (OPL-1.1 §1.5)
+    function updateWorkforce(uint256 workforceSize) external;
+    function getWorkforce(address licensee) external view returns (uint256);
+
+    // AI Training disclosure (OPL-1.1 §4.3)
+    function submitAITrainingDisclosure(
+        uint256 projectId,
+        string calldata softwareName,
+        string calldata commitHash,
+        string calldata repositoryURL,
+        string calldata modelCardURI,
+        bool downstreamNotified,
+        bool notCompetingProduct
+    ) external;
+    function getAITrainingDisclosure(uint256 projectId, address licensee) external view returns (
+        string memory softwareName,
+        string memory commitHash,
+        string memory repositoryURL,
+        string memory modelCardURI,
+        bool downstreamNotified,
+        bool competingProductDeclared,
+        bytes32 disclosureHash,
+        uint256 disclosedAt
+    );
+    function hasAITrainingDisclosure(uint256 projectId, address licensee) external view returns (bool);
     function setTierPricing(
         uint256 projectId,
         uint8 tier,
@@ -84,6 +132,45 @@ interface IRoyaltyRegistry {
         uint256 projectId,
         uint256 customPrice,
         address token
+    ) external;
+    function setCustomCommercialPrice(
+        uint256 projectId,
+        uint256 customPrice,
+        address token
+    ) external;
+    function setCustomBatchPricing(
+        uint256 projectId,
+        uint256[5] calldata prices,
+        address token
+    ) external;
+
+    // Canonical registry identity and temporal fee tracking (OPL-1.1 §3.2.1, §3.2.3)
+    function setRegistryIdentifier(string calldata identifier) external;
+    function getRegistryIdentifier() external view returns (string memory);
+    function setRegistryCertification(uint256 projectId, bytes32 certificationHash) external;
+    function advanceFeeScheduleVersion(uint256 projectId) external;
+    function getFeeScheduleVersion(uint256 projectId) external view returns (uint256);
+    function getFeeScheduleStatus(uint256 projectId) external view returns (bool isInNoticePeriod, uint256 effectiveAt);
+    function getFeeChangeEffectiveAt(uint256 projectId) external view returns (uint256);
+    function getFeeVersionSnapshot(uint256 projectId, uint256 feeVersion, uint8 tier) external view returns (uint256);
+
+    // Extended purchase functions with full metadata (per OPL-1.1 §1.20)
+    function purchaseLicenseWithMetadata(
+        uint256 projectId,
+        address licensee,
+        uint8 tier,
+        bytes32 metadataHash,
+        string calldata licenseVersion,
+        uint256 totalWorkforce
+    ) external payable;
+    function purchaseLicenseWithTokenAndMetadata(
+        uint256 projectId,
+        address licensee,
+        uint8 tier,
+        bytes32 metadataHash,
+        address token,
+        string calldata licenseVersion,
+        uint256 totalWorkforce
     ) external;
 
     // View functions

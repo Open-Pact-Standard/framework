@@ -34,9 +34,10 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
     // License acknowledgment metadata
     struct Acknowledgment {
         string licenseTextHash;         // Hash of the Open-Pact license text
+        string licenseVersion;          // OPL version string (e.g., "1.1") per §12.2
         string usageDescription;        // How the licensee intends to use the code
-        string companyName;             // Legal entity name
-        uint256 totalWorkforce;         // Per OPL-1.1 Section 1.5: total workers
+        string companyName;
+        uint256 totalWorkforce;
         uint256 timestamp;
     }
 
@@ -51,11 +52,9 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
 
     // Errors
     error ZeroAddress();
-    error LicenseNotActive(uint256 projectId, address licensee);
     error AcknowledgmentRequired();
-    error OracleNotAuthorized();
     error InvalidProjectId();
-    error NotAuthorized(address caller);
+    error WrongPaymentAmount(uint256 sent, uint256 required);
 
     // Events
     event LicenseAcknowledged(
@@ -104,13 +103,14 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
         // Record acknowledgment
         _acknowledgments[projectId][msg.sender] = Acknowledgment({
             licenseTextHash: ack.licenseTextHash,
+            licenseVersion: ack.licenseVersion,
             usageDescription: ack.usageDescription,
             companyName: ack.companyName,
             totalWorkforce: ack.totalWorkforce,
             timestamp: block.timestamp
         });
 
-        // Purchase the license via RoyaltyRegistry
+        // Purchase the license via RoyaltyRegistry (native token, defaults set in registry)
         royaltyRegistry.purchaseLicense{value: msg.value}(
             projectId,
             msg.sender,
@@ -140,18 +140,21 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
 
         _acknowledgments[projectId][msg.sender] = Acknowledgment({
             licenseTextHash: ack.licenseTextHash,
+            licenseVersion: ack.licenseVersion,
             usageDescription: ack.usageDescription,
             companyName: ack.companyName,
             totalWorkforce: ack.totalWorkforce,
             timestamp: block.timestamp
         });
 
-        royaltyRegistry.purchaseLicenseWithToken(
+        royaltyRegistry.purchaseLicenseWithTokenAndMetadata(
             projectId,
             msg.sender,
             uint8(tier),
             _computeMetadataHash(ack),
-            token
+            token,
+            ack.licenseVersion,
+            ack.totalWorkforce
         );
 
         emit LicenseAcknowledged(projectId, msg.sender, ack.companyName, ack.totalWorkforce);
@@ -255,6 +258,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
 
             _acknowledgments[projectIds[i]][msg.sender] = Acknowledgment({
                 licenseTextHash: ack.licenseTextHash,
+                licenseVersion: ack.licenseVersion,
                 usageDescription: ack.usageDescription,
                 companyName: ack.companyName,
                 totalWorkforce: ack.totalWorkforce,
@@ -263,7 +267,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
         }
 
         if (msg.value != totalRequired) {
-            revert ZeroAddress();
+            revert WrongPaymentAmount(msg.value, totalRequired);
         }
 
         // Purchase all licenses
@@ -272,13 +276,14 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
                 projectIds[i], uint8(tier)
             );
             if (pricing.enabled && pricing.token == address(0)) {
-                // Note: In a real implementation, this would need the RoyaltyRegistry
-                // to support batch purchasing to avoid reentrancy from multiple calls
-                royaltyRegistry.purchaseLicense{value: pricing.amount}(
+                // Calls purchaseLicenseWithMetadata to populate full license record
+                royaltyRegistry.purchaseLicenseWithMetadata{value: pricing.amount}(
                     projectIds[i],
                     msg.sender,
                     uint8(tier),
-                    _computeMetadataHash(ack)
+                    _computeMetadataHash(ack),
+                    ack.licenseVersion,
+                    ack.totalWorkforce
                 );
                 emit LicenseAcknowledged(projectIds[i], msg.sender, ack.companyName, ack.totalWorkforce);
             }
@@ -291,7 +296,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
 
     /**
      * @dev Update the default license text hash
-     * @param newHash Keccak256 hash of the canonical OPL-1.0 license
+     * @param newHash Keccak256 hash of the canonical OPL-1.1 license
      */
     function setDefaultLicenseHash(bytes32 newHash) external onlyOwner {
         bytes32 oldHash = defaultLicenseTextHash;
