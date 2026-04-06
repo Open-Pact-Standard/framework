@@ -18,7 +18,7 @@ import "./RoyaltyRegistry.sol";
  *      interact with LicenseIssuer, which handles:
  *      1. Tier pricing lookup from RoyaltyRegistry
  *      2. Payment verification and forwarding to RoyaltyRegistry
- *      3. License acknowledgment recording
+ *      3. License acknowledgment recording (OPL-1.1 totalWorkforce)
  *      4. Public license registry for verification
  *
  *      Integration:
@@ -33,10 +33,10 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
 
     // License acknowledgment metadata
     struct Acknowledgment {
-        string licenseTextHash;   // Hash of the Open-Pact license text
-        string usageDescription;  // How the licensee intends to use the code
-        string companyName;       // Legal entity name
-        uint256 employeeCount;    // Self-reported employee count
+        string licenseTextHash;         // Hash of the Open-Pact license text
+        string usageDescription;        // How the licensee intends to use the code
+        string companyName;             // Legal entity name
+        uint256 totalWorkforce;         // Per OPL-1.1 Section 1.5: total workers
         uint256 timestamp;
     }
 
@@ -46,7 +46,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
     // Price oracle support (optional: convert between token denominations)
     mapping(address => bool) private _authorizedOracles;
 
-    // Default license text hash (should match the canonical OPL-1.0)
+    // Default license text hash (should match the canonical OPL-1.1)
     bytes32 public defaultLicenseTextHash;
 
     // Errors
@@ -62,7 +62,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
         uint256 indexed projectId,
         address indexed licensee,
         string companyName,
-        uint256 employeeCount
+        uint256 totalWorkforce
     );
     event DefaultLicenseHashUpdated(bytes32 oldHash, bytes32 newHash);
     event OracleAuthorized(address indexed oracle, bool status);
@@ -106,7 +106,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
             licenseTextHash: ack.licenseTextHash,
             usageDescription: ack.usageDescription,
             companyName: ack.companyName,
-            employeeCount: ack.employeeCount,
+            totalWorkforce: ack.totalWorkforce,
             timestamp: block.timestamp
         });
 
@@ -118,7 +118,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
             _computeMetadataHash(ack)
         );
 
-        emit LicenseAcknowledged(projectId, msg.sender, ack.companyName, ack.employeeCount);
+        emit LicenseAcknowledged(projectId, msg.sender, ack.companyName, ack.totalWorkforce);
     }
 
     /**
@@ -142,7 +142,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
             licenseTextHash: ack.licenseTextHash,
             usageDescription: ack.usageDescription,
             companyName: ack.companyName,
-            employeeCount: ack.employeeCount,
+            totalWorkforce: ack.totalWorkforce,
             timestamp: block.timestamp
         });
 
@@ -154,7 +154,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
             token
         );
 
-        emit LicenseAcknowledged(projectId, msg.sender, ack.companyName, ack.employeeCount);
+        emit LicenseAcknowledged(projectId, msg.sender, ack.companyName, ack.totalWorkforce);
     }
 
     // ================================================================
@@ -257,7 +257,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
                 licenseTextHash: ack.licenseTextHash,
                 usageDescription: ack.usageDescription,
                 companyName: ack.companyName,
-                employeeCount: ack.employeeCount,
+                totalWorkforce: ack.totalWorkforce,
                 timestamp: block.timestamp
             });
         }
@@ -280,7 +280,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
                     uint8(tier),
                     _computeMetadataHash(ack)
                 );
-                emit LicenseAcknowledged(projectIds[i], msg.sender, ack.companyName, ack.employeeCount);
+                emit LicenseAcknowledged(projectIds[i], msg.sender, ack.companyName, ack.totalWorkforce);
             }
         }
     }
@@ -327,7 +327,7 @@ contract LicenseIssuer is Ownable, Pausable, ReentrancyGuard {
     function _computeMetadataHash(Acknowledgment memory ack) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(
             ack.companyName,
-            ack.employeeCount,
+            ack.totalWorkforce,
             ack.usageDescription,
             ack.licenseTextHash
         ));

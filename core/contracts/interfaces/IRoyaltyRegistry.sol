@@ -80,6 +80,11 @@ interface IRoyaltyRegistry {
     function renewLicense(uint256 projectId, uint8 tier) external payable;
     function revokeLicense(uint256 projectId, address licensee) external;
     function setPricingMode(uint256 projectId, uint8 mode) external;
+    function setCustomAITrainingPrice(
+        uint256 projectId,
+        uint256 customPrice,
+        address token
+    ) external;
 
     // View functions
     function getProject(uint256 projectId) external view returns (ViewProject memory);

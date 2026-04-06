@@ -12,7 +12,7 @@ import "../interfaces/IPaymentLedger.sol";
 /**
  * @title RoyaltyRegistry
  * @dev Core royalty collection and contributor distribution contract for
- *      Open-Pact (OPL) licensed projects. Receives payments (native or ERC20)
+ *      Open-Pact (OPL-1.1) licensed projects. Receives payments (native or ERC20)
  *      from commercial/AI usage and distributes them to registered contributors
  *      according to weighted shares.
  *
@@ -25,8 +25,9 @@ import "../interfaces/IPaymentLedger.sol";
  *      3. Commercial users pay royalties for usage licenses
  *      4. Royalties are batched and distributed to contributors
  *
- *      Pricing model: Fixed annual tiers (company-size based) with optional
- *      revenue-share percentage mode. Maintainers choose per-project.
+ *      Pricing model: Per-OPL-1.1 Section 3.2, pricing is NOT fixed by the
+ *      license text. Maintainers define fees dynamically via the Project
+ *      Registry or this contract's Custom pricing mode.
  */
 contract RoyaltyRegistry is IRoyaltyRegistry, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -890,14 +891,78 @@ contract RoyaltyRegistry is IRoyaltyRegistry, Ownable, Pausable, ReentrancyGuard
         _totalRoyaltiesByToken[projectId][token] += amount;
     }
 
-    function _setDefaultPricing(uint256 projectId, address token) internal {
-        // Default pricing in stablecoin-equivalent terms
-        // Micro: 100, Small: 1000, Medium: 10000, Enterprise: 50000, AI_Training: 25000
+    /// @notice Sets recommended default tier prices (stablecoin-equivalent, 18 decimals).
+    /// @dev This is OPTIONAL and provided purely for convenience. Maintainers SHOULD
+    /// override these with values appropriate for their project. Per OPL-1.1 Section 3.2,
+    /// pricing is NOT fixed by the license text and is determined dynamically by the Steward.
+    function setRecommendedPricing(uint256 projectId, address token) internal {
         _tierPricing[projectId][LicenseTier.Micro] = TierPricing(100 * 10**18, token, true);
         _tierPricing[projectId][LicenseTier.Small] = TierPricing(1000 * 10**18, token, true);
         _tierPricing[projectId][LicenseTier.Medium] = TierPricing(10000 * 10**18, token, true);
         _tierPricing[projectId][LicenseTier.Enterprise] = TierPricing(50000 * 10**18, token, true);
         _tierPricing[projectId][LicenseTier.AI_Training] = TierPricing(25000 * 10**18, token, true);
+    }
+
+    /**
+     * @dev Set custom pricing for the Commercial tier (tier 0).
+     *      Per OPL-1.1 Section 3.2, Stewards define fees dynamically.
+     * @param projectId Project ID
+     * @param customPrice Fee amount (in token decimals)
+     * @param token Payment token (address(0) for native)
+     */
+    function setCustomCommercialPrice(
+        uint256 projectId,
+        uint256 customPrice,
+        address token
+    ) external onlyProjectMaintainer(projectId) {
+        if (customPrice == 0) revert ZeroAmount();
+        _tierPricing[projectId][LicenseTier.Micro] = TierPricing(customPrice, token, true);
+        emit TierPricingUpdated(projectId, LicenseTier.Micro, customPrice, token);
+    }
+
+    /**
+     * @dev Set custom pricing for the AI Training tier (tier 4).
+     * @param projectId Project ID
+     * @param customPrice Fee amount (in token decimals)
+     * @param token Payment token
+     */
+    function setCustomAITrainingPrice(
+        uint256 projectId,
+        uint256 customPrice,
+        address token
+    ) external onlyProjectMaintainer(projectId) {
+        if (customPrice == 0) revert ZeroAmount();
+        _tierPricing[projectId][LicenseTier.AI_Training] = TierPricing(customPrice, token, true);
+        emit TierPricingUpdated(projectId, LicenseTier.AI_Training, customPrice, token);
+    }
+
+    /**
+     * @dev Set batch custom pricing for all tiers using the Custom pricing mode.
+     *      This allows Stewards to define completely arbitrary fee structures.
+     * @param projectId Project ID
+     * @param prices Array of prices for each tier [Micro, Small, Medium, Enterprise, AI_Training]
+     * @param token Payment token
+     */
+    function setCustomBatchPricing(
+        uint256 projectId,
+        uint256[5] calldata prices,
+        address token
+    ) external onlyProjectMaintainer(projectId) {
+        LicenseTier[5] memory tiers = [
+            LicenseTier.Micro,
+            LicenseTier.Small,
+            LicenseTier.Medium,
+            LicenseTier.Enterprise,
+            LicenseTier.AI_Training
+        ];
+        for (uint256 i = 0; i < 5; i++) {
+            if (prices[i] > 0) {
+                _tierPricing[projectId][tiers[i]] = TierPricing(prices[i], token, true);
+                emit TierPricingUpdated(projectId, tiers[i], prices[i], token);
+            }
+        }
+        emit PricingModeChanged(projectId, _projects[projectId].pricingMode, PricingMode.Custom);
+        _projects[projectId].pricingMode = PricingMode.Custom;
     }
 
     /// @notice Receive native token payments for license purchases
